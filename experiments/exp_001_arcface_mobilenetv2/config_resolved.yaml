@@ -1,0 +1,104 @@
+model:
+  backbone: mobilenet_v2
+  pretrained: true
+  embedding_dim: 512
+  dropout: 0.2
+head:
+  type: arcface
+  s: 64.0
+  m: 0.5
+  easy_margin: false
+dataset:
+  name: lfw
+  raw_dir: data/raw/lfw
+  processed_dir: data/processed/lfw
+  splits_dir: data/splits/lfw
+preprocessing:
+  image_size: 112
+  detector: mtcnn
+  min_face_size: 40
+splits:
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  seed: 42
+verification_pairs:
+  num_positive: 3000
+  num_negative: 3000
+  scenarios:
+  - name: full_vs_full
+    p1_masked: false
+    p2_masked: false
+  - name: full_vs_masked
+    p1_masked: false
+    p2_masked: true
+  - name: masked_vs_masked
+    p1_masked: true
+    p2_masked: true
+augmentation:
+  training:
+    horizontal_flip: 0.5
+    color_jitter:
+      brightness: 0.2
+      contrast: 0.2
+      saturation: 0.2
+    random_occlusion:
+      probability: 0.3
+      max_size_ratio: 0.3
+    synthetic_mask:
+      probability: 0.5
+      mask_assets_dir: data/raw/mask_assets
+  validation:
+    horizontal_flip: 0.0
+normalization:
+  mean:
+  - 127.5
+  - 127.5
+  - 127.5
+  std:
+  - 128.0
+  - 128.0
+  - 128.0
+experiment_name: exp_001_arcface_mobilenetv2
+description: 'Baseline: MobileNetV2 + ArcFace với synthetic mask augmentation'
+training:
+  num_epochs: 30
+  batch_size: 128
+  num_workers: 4
+  mixed_precision: true
+  optimizer:
+    type: sgd
+    lr: 0.1
+    momentum: 0.9
+    weight_decay: 0.0005
+    nesterov: true
+  scheduler:
+    type: cosine_warmup
+    warmup_epochs: 3
+    min_lr: 1.0e-05
+  stages:
+  - name: head_only
+    epochs: 3
+    freeze_backbone: true
+    lr_multiplier: 1.0
+  - name: full_finetune
+    epochs: 27
+    freeze_backbone: false
+    lr_multiplier: 0.1
+  loss:
+    type: arcface
+    label_smoothing: 0.1
+checkpoint:
+  save_every_n_epochs: 5
+  keep_last_n: 3
+  monitor_metric: val/tar_at_far_1e-3
+  monitor_mode: max
+early_stopping:
+  enabled: true
+  patience: 10
+  min_delta: 0.001
+logging:
+  log_every_n_steps: 50
+  tensorboard: true
+seed: 42
+deterministic: false

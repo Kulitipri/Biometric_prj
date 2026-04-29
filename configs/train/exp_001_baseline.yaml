@@ -1,0 +1,71 @@
+# === Experiment 001: Baseline ===
+# MobileNetV2 + ArcFace, train trên LFW với synthetic mask augmentation
+
+experiment_name: exp_001_arcface_mobilenetv2
+description: "Baseline: MobileNetV2 + ArcFace với synthetic mask augmentation"
+
+# Kế thừa từ các config khác (sẽ merge)
+_base_:
+  - configs/model/mobilenet_v2_arcface.yaml
+  - configs/data/lfw.yaml
+
+training:
+  num_epochs: 30
+  batch_size: 128
+  num_workers: 4
+  mixed_precision: true        # fp16 training để tiết kiệm VRAM
+
+  # Optimizer
+  optimizer:
+    type: sgd
+    lr: 0.1
+    momentum: 0.9
+    weight_decay: 5.0e-4
+    nesterov: true
+
+  # Learning rate scheduler
+  scheduler:
+    type: cosine_warmup
+    warmup_epochs: 3
+    min_lr: 1.0e-5
+
+  # Staging (freeze/unfreeze backbone)
+  stages:
+    - name: head_only
+      epochs: 3
+      freeze_backbone: true
+      lr_multiplier: 1.0
+    - name: full_finetune
+      epochs: 27
+      freeze_backbone: false
+      lr_multiplier: 0.1       # giảm LR xuống khi unfreeze
+
+  # Loss
+  loss:
+    type: arcface
+    label_smoothing: 0.1
+
+# Checkpointing
+checkpoint:
+  save_every_n_epochs: 5
+  keep_last_n: 3
+  monitor_metric: val/tar_at_far_1e-3
+  monitor_mode: max
+
+# Early stopping
+early_stopping:
+  enabled: true
+  patience: 10
+  min_delta: 0.001
+
+# Logging
+logging:
+  log_every_n_steps: 50
+  tensorboard: true
+  # wandb:
+  #   project: biometric-project
+  #   entity: group-12
+
+# Reproducibility
+seed: 42
+deterministic: false           # true sẽ chậm hơn, false cho training nhanh

@@ -1,0 +1,13 @@
+# === MobileNetV2 + ArcFace Model Configuration ===
+
+model:
+  backbone: mobilenet_v2
+  pretrained: true
+  embedding_dim: 512
+  dropout: 0.2
+
+head:
+  type: arcface
+  s: 64.0     # Scale factor
+  m: 0.5      # Angular margin (radians)
+  easy_margin: false

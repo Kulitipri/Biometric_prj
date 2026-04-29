@@ -1,0 +1,91 @@
+# === Data (không commit dataset lên Git) ===
+data/raw/*
+data/processed/*
+data/embeddings/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/embeddings/.gitkeep
+
+# === Experiments artifacts ===
+experiments/*/checkpoints/*
+experiments/*/logs/*
+experiments/*/results/*
+!experiments/*/checkpoints/.gitkeep
+!experiments/*/logs/.gitkeep
+!experiments/*/results/.gitkeep
+
+# Outputs
+outputs/*
+!outputs/.gitkeep
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# === Virtual environments ===
+venv/
+env/
+ENV/
+.venv/
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === Jupyter ===
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Model files (thường lớn) ===
+*.pth
+*.pt
+*.ckpt
+*.h5
+*.onnx
+*.pb
+*.tflite
+
+# === Logs ===
+*.log
+runs/
+logs/
+wandb/
+
+# === Environment variables ===
+.env
+.env.local
+
+# === Misc ===
+*.cache
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/

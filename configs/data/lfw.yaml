@@ -1,0 +1,55 @@
+# === LFW Dataset Configuration ===
+
+dataset:
+  name: lfw
+  raw_dir: data/raw/lfw
+  processed_dir: data/processed/lfw
+  splits_dir: data/splits/lfw
+
+preprocessing:
+  image_size: 112
+  detector: mtcnn  # hoặc retinaface
+  min_face_size: 40
+
+splits:
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+  seed: 42
+
+verification_pairs:
+  num_positive: 3000
+  num_negative: 3000
+  # Tạo pairs với 3 scenarios:
+  scenarios:
+    - name: full_vs_full
+      p1_masked: false
+      p2_masked: false
+    - name: full_vs_masked
+      p1_masked: false
+      p2_masked: true
+    - name: masked_vs_masked
+      p1_masked: true
+      p2_masked: true
+
+augmentation:
+  training:
+    horizontal_flip: 0.5
+    color_jitter:
+      brightness: 0.2
+      contrast: 0.2
+      saturation: 0.2
+    random_occlusion:
+      probability: 0.3
+      max_size_ratio: 0.3
+    synthetic_mask:
+      probability: 0.5   # 50% ảnh sẽ được thêm mask
+      mask_assets_dir: data/raw/mask_assets
+  validation:
+    # Chỉ normalize, không augment
+    horizontal_flip: 0.0
+
+normalization:
+  # Chuẩn InsightFace: (pixel - 127.5) / 128
+  mean: [127.5, 127.5, 127.5]
+  std: [128.0, 128.0, 128.0]
