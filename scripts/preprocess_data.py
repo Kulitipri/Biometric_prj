@@ -7,10 +7,19 @@ Chạy preprocessing.py trên toàn bộ dataset:
 - Save vào data/processed/
 
 Usage:
+    # Auto-detect device (ưu tiên CUDA nếu có)
     python scripts/preprocess_data.py --config configs/data/lfw.yaml
 
-    # Override device hoặc input/output dirs:
+    # Ép dùng GPU
+    python scripts/preprocess_data.py --config configs/data/lfw.yaml --device cuda
+
+    # Ép dùng CPU
     python scripts/preprocess_data.py --config configs/data/lfw.yaml --device cpu
+
+    # Chạy lại từ đầu, không skip ảnh đã có
+    python scripts/preprocess_data.py --config configs/data/lfw.yaml --force
+
+    # Override input/output dirs:
     python scripts/preprocess_data.py --config configs/data/lfw.yaml \\
         --input-dir data/raw/custom \\
         --output-dir data/processed/custom
@@ -27,7 +36,13 @@ Yêu cầu input:
 import argparse
 import logging
 import sys
+import warnings
 from pathlib import Path
+
+# Tắt FutureWarning của facenet-pytorch (về torch.load weights_only).
+# Đây là warning vô hại, chỉ làm rối log. PHẢI gọi TRƯỚC khi import facenet_pytorch.
+warnings.filterwarnings("ignore", category=FutureWarning, module="facenet_pytorch")
+warnings.filterwarnings("ignore", category=FutureWarning, module="torch.serialization")
 
 # Cho phép import từ src/ khi chạy script trực tiếp
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -69,9 +84,81 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Tải lại tất cả ảnh (không skip ảnh đã có trong output_dir)",
+        help="Chạy lại tất cả ảnh (không skip ảnh đã có trong output_dir). "
+             "Dùng khi muốn re-process từ đầu.",
     )
     return parser.parse_args()
+
+
+def resolve_device(requested, logger: logging.Logger) -> str:
+    """
+    Xác định device sử dụng (cuda/cpu) một cách rõ ràng và minh bạch.
+
+    Logic:
+    - Nếu user truyền --device cuda nhưng CUDA không khả dụng:
+        cảnh báo lớn (KHÔNG fallback im lặng) và fallback về CPU.
+    - Nếu user không truyền --device: tự chọn cuda nếu có, không thì cpu.
+    - Nếu user truyền --device cpu: tôn trọng lựa chọn.
+    """
+    import torch
+
+    cuda_available = torch.cuda.is_available()
+
+    # Trường hợp 1: User ép dùng CUDA
+    if requested == "cuda":
+        if not cuda_available:
+            logger.error("=" * 60)
+            logger.error("❌ Bạn yêu cầu --device cuda NHƯNG CUDA không khả dụng!")
+            logger.error("   Lý do có thể:")
+            logger.error("   1. PyTorch cài là bản CPU-only.")
+            logger.error("      → Cài lại: pip install torch torchvision \\")
+            logger.error("                  --index-url https://download.pytorch.org/whl/cu121")
+            logger.error("   2. NVIDIA driver chưa cài hoặc quá cũ.")
+            logger.error("      → Kiểm tra: nvidia-smi")
+            logger.error("   3. Không có GPU NVIDIA trên máy.")
+            logger.error("")
+            logger.error(f"   PyTorch version: {torch.__version__}")
+            logger.error(f"   PyTorch CUDA build: {torch.version.cuda}")
+            logger.error("=" * 60)
+            logger.warning("⚠️  Tự fallback về CPU.")
+            return "cpu"
+        return "cuda"
+
+    # Trường hợp 2: User ép dùng CPU
+    if requested == "cpu":
+        if cuda_available:
+            logger.info(
+                "ℹ️  CUDA khả dụng nhưng bạn chọn --device cpu. "
+                "Bỏ flag --device để tự dùng GPU."
+            )
+        return "cpu"
+
+    # Trường hợp 3: Auto-detect
+    if cuda_available:
+        return "cuda"
+    else:
+        logger.warning(
+            "⚠️  CUDA không khả dụng → dùng CPU. "
+            f"PyTorch version: {torch.__version__}, "
+            f"CUDA build: {torch.version.cuda}. "
+            "Nếu bạn có GPU NVIDIA, hãy cài bản PyTorch có CUDA "
+            "(https://pytorch.org/get-started/locally/)."
+        )
+        return "cpu"
+
+
+def log_device_info(device: str, logger: logging.Logger) -> None:
+    """Log chi tiết về device sẽ dùng (tên GPU, VRAM)."""
+    import torch
+
+    if device == "cuda":
+        gpu_idx = torch.cuda.current_device()
+        gpu_name = torch.cuda.get_device_name(gpu_idx)
+        vram_gb = torch.cuda.get_device_properties(gpu_idx).total_memory / (1024 ** 3)
+        logger.info(f"  GPU:            {gpu_name} ({vram_gb:.1f} GB VRAM)")
+        logger.info(f"  CUDA version:   {torch.version.cuda}")
+    else:
+        logger.info(f"  CPU mode (PyTorch {torch.__version__})")
 
 
 def main() -> int:
@@ -93,13 +180,8 @@ def main() -> int:
         dataset_cfg.get("processed_dir", "data/processed")
     )
 
-    # Resolve device: CLI > auto-detect
-    if args.device:
-        device = args.device
-    else:
-        # Lazy check torch để không phải import nếu không cần
-        import torch
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+    # Resolve device với logic minh bạch hơn
+    device = resolve_device(args.device, logger)
 
     image_size = preprocessing_cfg.get("image_size", 112)
     min_face_size = preprocessing_cfg.get("min_face_size", 40)
@@ -113,6 +195,7 @@ def main() -> int:
     logger.info(f"  Image size:     {image_size}x{image_size}")
     logger.info(f"  Min face size:  {min_face_size}")
     logger.info(f"  Device:         {device}")
+    log_device_info(device, logger)
     logger.info(f"  Skip existing:  {not args.force}")
     logger.info("=" * 60)
 
@@ -136,17 +219,43 @@ def main() -> int:
         logger.error(f"[ERROR] Preprocessing failed: {e}", exc_info=True)
         return 1
 
-    # Check kết quả
+    # === Check kết quả với logic mới (phân biệt skip vs fail) ===
     if stats["total"] == 0:
         logger.error("[ERROR] Không có ảnh nào trong input dir!")
         return 1
 
-    success_rate = stats["success"] / stats["total"] * 100
-    if success_rate < 50:
-        logger.warning(
-            f"⚠️  Success rate thấp ({success_rate:.1f}%). "
-            f"Kiểm tra failed.txt trong {output_dir}"
+    # Số ảnh thực sự được xử lý lần này (không tính skipped)
+    processed = stats["total"] - stats["skipped"]
+
+    if processed == 0:
+        # Toàn bộ bị skip → output đã đầy đủ từ lần chạy trước
+        logger.info(
+            f"✓ Tất cả {stats['skipped']} ảnh đã có sẵn trong {output_dir}. "
+            f"Không cần xử lý thêm."
         )
+        logger.info(
+            "   Nếu muốn chạy lại từ đầu, dùng flag: --force"
+        )
+    else:
+        # Có ảnh được xử lý → tính success rate trên số ảnh thực sự xử lý
+        success_rate = stats["success"] / processed * 100
+        logger.info(
+            f"Đã xử lý {processed} ảnh (skip {stats['skipped']} ảnh đã tồn tại): "
+            f"thành công {stats['success']} ({success_rate:.1f}%), fail {stats['failed']}"
+        )
+
+        if success_rate < 50:
+            logger.warning(
+                f"⚠️  Success rate thấp ({success_rate:.1f}% trên "
+                f"{processed} ảnh được xử lý mới). "
+                f"Kiểm tra failed.txt trong {output_dir} để xem chi tiết."
+            )
+        elif success_rate < 90:
+            logger.warning(
+                f"⚠️  Success rate vừa phải ({success_rate:.1f}%). "
+                f"Một số ảnh detect không ra mặt — bình thường với LFW "
+                f"(chiếm ~5-10% do ảnh nhiễu/chất lượng kém)."
+            )
 
     logger.info(f"✓ Preprocessing hoàn tất: {output_dir}")
     return 0

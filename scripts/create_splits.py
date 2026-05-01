@@ -282,28 +282,28 @@ def create_verification_pairs(
         )
 
     # === Tạo positive pairs ===
-    positive_pairs = []
-    if eligible_identities:
-        max_attempts = num_positive * 10  # tránh infinite loop
-        seen = set()
-        attempts = 0
-        while len(positive_pairs) < num_positive and attempts < max_attempts:
-            attempts += 1
-            identity = rng.choice(eligible_identities)
-            imgs = identity_to_images[identity]
-            img1, img2 = rng.sample(imgs, 2)
-            # Tạo key đối xứng để tránh duplicate
-            key = tuple(sorted([img1, img2]))
-            if key in seen:
-                continue
-            seen.add(key)
-            positive_pairs.append((img1, img2, 1))
-
-        if len(positive_pairs) < num_positive:
-            logger.warning(
-                f"Chỉ tạo được {len(positive_pairs)}/{num_positive} positive pairs. "
-                f"Dataset có thể quá ít ảnh/identity."
-            )
+    # Tạo tất cả possible pairs rồi sample, thay vì random 30k lần
+    all_possible_positive = []
+    for identity in eligible_identities:
+        imgs = identity_to_images[identity]
+        # Tạo tất cả pair từ ảnh của 1 identity
+        for i in range(len(imgs)):
+            for j in range(i + 1, len(imgs)):
+                all_possible_positive.append((imgs[i], imgs[j], 1))
+    
+    logger.info(
+        f"  Total possible positive pairs: {len(all_possible_positive)}"
+    )
+    
+    # Shuffle & sample
+    rng.shuffle(all_possible_positive)
+    positive_pairs = all_possible_positive[:num_positive]
+    
+    if len(positive_pairs) < num_positive:
+        logger.warning(
+            f"Chỉ tạo được {len(positive_pairs)}/{num_positive} positive pairs. "
+            f"Max possible: {len(all_possible_positive)}"
+        )
 
     # === Tạo negative pairs ===
     negative_pairs = []
